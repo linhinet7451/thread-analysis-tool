@@ -24,6 +24,7 @@ from threads_desktop import (
     threads_api_fetch_json, parse_threads_api_posts, parse_threads_api_replies,
     STEALTH_INSTALL_MSG, THREADS_API_INSTALL_MSG, GRAPHQL_DOC_IDS,
     POST_COLS, COMMENT_COLS, SAMPLE_POSTS, SAMPLE_COMMENTS,
+    auto_should_fallback, AccessError,
 )
 
 SAMPLE_BLOB = {
@@ -357,6 +358,19 @@ def test_safe_excel():
     assert safe_excel('=1+1') == "'=1+1"
     assert safe_excel(None) == ''
     assert safe_excel(42) == 42
+
+
+def test_auto_should_fallback():
+    # v1.1 回歸測試：直接網頁最常見的失敗是 0 篇（空殼／登入牆），
+    # _collect_direct 拋 RuntimeError，不是 AccessError。
+    # 舊版自動鏈只接 AccessError，所以永遠不切換到隱身瀏覽器，
+    # 還誤導使用者「請改用自動模式」——使用者明明已經在自動模式。
+    assert auto_should_fallback(RuntimeError('0 篇'), 0) is True
+    assert auto_should_fallback(AccessError('403'), 0) is True
+    assert auto_should_fallback(None, 0) is True
+    assert auto_should_fallback(RuntimeError('0 篇'), 3) is False
+    assert auto_should_fallback(AccessError('403'), 3) is False
+    assert auto_should_fallback(ValueError('其他錯誤'), 0) is False
 
 
 def test_no_paid_mode():

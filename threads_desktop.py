@@ -107,6 +107,22 @@ class NotFoundError(RuntimeError):
     pass
 
 
+def auto_should_fallback(exc, post_count):
+    """自動模式是否該在直接網頁失敗後切換到隱身瀏覽器（v1.1 修復）。
+
+    Threads 的直接網頁常常不是回 403，而是回一個空殼頁面、內嵌 JSON
+    沒有貼文，_collect_direct 因此 raise RuntimeError（0 篇）。
+    舊版自動鏈只接 AccessError，所以這種最常見的情況永遠不會切換
+    到隱身瀏覽器，還誤導使用者「請改用自動模式再按一次」——使用者
+    明明已經在自動模式。只要還沒拿到任何文章，兩種錯誤都要切換。
+    """
+    if post_count:
+        return False
+    if exc is None:
+        return True
+    return isinstance(exc, (AccessError, RuntimeError))
+
+
 def safe_excel(v):
     if v is None:
         return ''
@@ -1363,7 +1379,7 @@ def build_user_style_prompt(username, stats, own_posts, replies, now):
 class ThreadsApp:
     def __init__(self, root):
         self.root = root
-        root.title('Threads 文章與留言蒐集器 1.0（含 Gemini 趨勢分析＋使用者分析）')
+        root.title('Threads 文章與留言蒐集器 1.1（含 Gemini 趨勢分析＋使用者分析）')
         root.geometry('1080x780')
         root.minsize(850, 620)
         self.q = queue.Queue()
@@ -1807,11 +1823,12 @@ class ThreadsApp:
                 self.log('蒐集模式：自動——先試直接網頁，被擋時自動改用隱身瀏覽器。')
                 try:
                     self._collect_direct(selected, limit, include_replies)
-                except AccessError as exc:
-                    if self.posts:
-                        self.log(f'直接網頁中途被拒，已保留 {len(self.posts)} 篇文章：{exc}')
+                except (AccessError, RuntimeError) as exc:
+                    # v1.1：直接網頁 0 篇時 _collect_direct 拋 RuntimeError，
+                    # 不是 AccessError，舊版只接 AccessError 就永遠不切換。
+                    if not auto_should_fallback(exc, len(self.posts)):
                         raise
-                    self.log(f'直接網頁被拒（{exc}），自動切換到隱身瀏覽器…')
+                    self.log(f'直接網頁沒有取得文章（{exc}），自動切換到隱身瀏覽器…')
                     ok, engine = stealth_available()
                     if ok:
                         try:
@@ -1978,7 +1995,7 @@ class ThreadsApp:
         if not posts:
             raise RuntimeError(
                 '直接網頁沒有取得任何文章：可能是登入牆或頁面為空殼。'
-                '請改用「自動（建議）」模式再按一次（會自動改用隱身瀏覽器）。')
+                '（自動模式會接著切換到隱身瀏覽器；若你看到這則訊息，代表自動切換也失敗或尚未安裝隱身瀏覽器。）')
         self._emit_posts_comments(posts, comments)
 
     def _collect_stealth(self, selected, limit, include_replies):
@@ -2292,6 +2309,20 @@ class ThreadsApp:
                 own_posts = [p for p in posts if p.get('帳號') == username]
             if self.cancel.is_set():
                 raise InterruptedError('已手動停止')
+            # v1.1：直接網頁 0 篇是常態（空殼／登入牆），不是例外，
+            # 舊版只在 AccessError 時切換，這裡也要切換到隱身瀏覽器。
+            if not own_posts and not user_replies:
+                self.log('直接網頁沒有取得任何文章，改用隱身瀏覽器抓 '
+                         f'@{username}…')
+                ok, engine = stealth_available()
+                if not ok:
+                    raise RuntimeError('直接網頁沒有取得任何文章，且尚未安裝隱身瀏覽器。\n\n' + STEALTH_INSTALL_MSG)
+                posts, _ = stealth_collect_sources(
+                    [('帳號', username)], posts_limit, False,
+                    cancel=self.cancel, log=self.log)
+                own_posts = [p for p in posts if p.get('帳號') == username]
+                self.log('提醒：隱身瀏覽器模式抓不到「回覆他人」的留言頁，'
+                         '使用者分析的回覆樣本可能為 0。')
             if not own_posts and not user_replies:
                 raise RuntimeError(f'沒有取得 @{username} 的任何公開貼文或回覆：'
                                    '可能是私人帳號、帳號不存在或登入牆。')
