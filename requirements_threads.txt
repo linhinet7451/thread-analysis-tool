@@ -1,0 +1,30 @@
+requests>=2.31,<3
+openpyxl>=3.1,<4
+# tkinter 為 Python 標準函式庫，不需另外安裝。
+# 本工具不使用 beautifulsoup4（Threads 走內嵌 JSON 與 GraphQL，不解析 HTML 標籤）。
+#
+# ── 自動模式建議安裝（選用；以下行預設是註解，不會被安裝）──
+# 自動模式的流程是：直接網頁 → curl-cffi → 隱身瀏覽器 → 官方 Threads API。
+# 想讓「自動」模式在被擋時能自動改用隱身瀏覽器，第一次使用前請
+# 取消下面 patchright 兩行的註解安裝，或直接按工具裡的
+# 「安裝隱身瀏覽器（自動）」按鈕（會自動跑 pip install + 安裝 Chromium）。
+# curl-cffi：403 時的 TLS 偽裝重試。未安裝時主程式仍可正常使用。
+# curl-cffi>=0.5,<1
+# playwright：舊版 Playwright 僅當隱身瀏覽器的最後備援，安裝後還需執行
+#   `playwright install chromium`。
+# playwright>=1.40,<2
+#
+# ── 隱身瀏覽器（選用；預設是註解，不會被安裝）──
+# Patchright（首選）：改過的 Playwright，API 完全相同，普通 Playwright
+#   會漏 automation 訊號，Patchright 不會。裝完再跑 `patchright install chromium`。
+# patchright>=1.40,<2
+# Camoufox（次選）：改過的 Firefox，指紋在 C++ 層注入，humanize=True 會做
+#   人類曲線滑鼠移動。裝完再跑 `python -m camoufox fetch` 下載改過的 Firefox。
+#   需手動安裝，工具裡的「安裝隱身瀏覽器（自動）」只裝 Patchright。
+# camoufox[geoip]>=0.5,<1
+# playwright-stealth：不要只依賴它，已有未解決的偵測問題，僅當舊版
+#   Playwright 的最後備援（主程式會自動套用，不需手動裝）。
+# playwright-stealth>=0.1,<1
+#
+# 本工具沒有任何要錢的爬蟲服務，全部模式都是免費的：
+# 直接網頁、隱身瀏覽器、官方 Threads API（使用者自己的 Meta App token）。
